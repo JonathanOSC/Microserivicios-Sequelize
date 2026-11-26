@@ -1,0 +1,98 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres-compras
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-SistemaCompras}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-SistemaCompras}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - compras-network
+
+  cliente-api:
+    build:
+      context: ./cliente-api
+      dockerfile: Dockerfile
+    container_name: cliente-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-SistemaCompras}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - compras-network
+
+  producto-api:
+    build:
+      context: ./producto-api
+      dockerfile: Dockerfile
+    container_name: producto-api
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-SistemaCompras}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - compras-network
+
+  compra-api:
+    build:
+      context: ./compra-api
+      dockerfile: Dockerfile
+    container_name: compra-api
+    restart: unless-stopped
+    ports:
+      - "3003:3003"
+    environment:
+      PORT: 3003
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-SistemaCompras}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD:-postgres}
+      CLIENTE_API_URL: http://cliente-api:3001
+      PRODUCTO_API_URL: http://producto-api:3002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      cliente-api:
+        condition: service_started
+      producto-api:
+        condition: service_started
+    networks:
+      - compras-network
+
+networks:
+  compras-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
